@@ -1750,7 +1750,7 @@ def ensure_file(filename):
 
     try:
         downloaded_path = hf_hub_download(
-            repo_id=HF_REPO,
+            repo_id="Rithvik-3103/cyber-ann-models",
             repo_type="model",
             filename=filename,
             token=False,
