@@ -4380,9 +4380,19 @@ export default function App() {
       );
       setEngine('online');
       notify('Threat telemetry scan completed successfully.');
-    } catch (err) {
-      setError(errorMessage(err));
-      if (!err.response) setEngine('offline');
+    } catch (error) {
+      console.error("Prediction request failed:", error);
+      console.error("Request URL:", error.config?.url || `${API_URL}/predict`);
+      console.error("HTTP status:", error.response?.status);
+      console.error("Server response:", error.response?.data);
+      console.error("Error message:", error.message);
+
+      setError(
+        error.response
+          ? `Backend returned HTTP ${error.response.status}: ${typeof error.response.data?.detail === 'string' ? error.response.data.detail : JSON.stringify(error.response.data || {})}`
+          : `Connection failed: ${error.message}. Request URL: ${error.config?.url || `${API_URL}/predict`}`
+      );
+      if (!error.response) setEngine('offline');
     } finally {
       setLoading(false);
     }
@@ -4406,8 +4416,17 @@ export default function App() {
       });
       setCompareResult({ ...response.data, file: file.name });
       notify('Model comparison completed.');
-    } catch (err) {
-      setCompareError(errorMessage(err));
+    } catch (error) {
+      console.error("Model comparison request failed:", error);
+      console.error("Request URL:", error.config?.url || `${API_URL}/compare`);
+      console.error("HTTP status:", error.response?.status);
+      console.error("Server response:", error.response?.data);
+      console.error("Error message:", error.message);
+      setCompareError(
+        error.response
+          ? `Backend returned HTTP ${error.response.status}: ${typeof error.response.data?.detail === 'string' ? error.response.data.detail : JSON.stringify(error.response.data || {})}`
+          : `Connection failed: ${error.message}. Request URL: ${error.config?.url || `${API_URL}/compare`}`
+      );
     } finally {
       setComparing(false);
     }
