@@ -1780,21 +1780,58 @@ app.add_middleware(
 
 # Log requests (including OPTIONS preflight requests) so mobile failures are visible
 # in Render logs. This middleware is registered after CORS so it can log preflight too.
+# @app.middleware("http")
+# async def log_http_requests(request, call_next):
+#     method = request.method
+#     path = request.url.path
+#     origin = request.headers.get("origin", "-")
+#     print(f"[http] -> {method} {path} origin={origin}", flush=True)
+#     try:
+#         response = await call_next(request)
+#     except Exception as exc:
+#         print(
+#             f"[http] !! {method} {path} exception={type(exc).__name__}: {exc}",
+#             flush=True,
+#         )
+#         raise
+#     print(f"[http] <- {method} {path} status={response.status_code}", flush=True)
+#     return response
+
 @app.middleware("http")
 async def log_http_requests(request, call_next):
     method = request.method
     path = request.url.path
     origin = request.headers.get("origin", "-")
-    print(f"[http] -> {method} {path} origin={origin}", flush=True)
+
+    requested_method = request.headers.get(
+        "access-control-request-method", "-"
+    )
+    requested_headers = request.headers.get(
+        "access-control-request-headers", "-"
+    )
+
+    print(
+        f"[http] -> {method} {path} "
+        f"origin={origin} "
+        f"requested_method={requested_method} "
+        f"requested_headers={requested_headers}",
+        flush=True,
+    )
+
     try:
         response = await call_next(request)
     except Exception as exc:
         print(
-            f"[http] !! {method} {path} exception={type(exc).__name__}: {exc}",
+            f"[http] !! {method} {path} "
+            f"exception={type(exc).__name__}: {exc}",
             flush=True,
         )
         raise
-    print(f"[http] <- {method} {path} status={response.status_code}", flush=True)
+
+    print(
+        f"[http] <- {method} {path} status={response.status_code}",
+        flush=True,
+    )
     return response
 
 
