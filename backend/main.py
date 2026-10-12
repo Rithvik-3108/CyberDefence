@@ -1716,8 +1716,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 BASE_DIR = os.getenv("MODEL_DIR") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_models")
 HF_REPO = os.getenv("HF_REPO", "Rithvik-3103/cyber-ann-models")
-HF_REPO_TYPE = os.getenv("HF_REPO_TYPE", "model")  # your repo is a public MODEL repo
-HF_TOKEN = (os.getenv("HF_TOKEN") or "").strip() or None  # leave unset for public repos
+HF_REPO_TYPE = "model"
+HF_TOKEN = None
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "30"))
 MAX_THREAT_ROWS = int(os.getenv("MAX_THREAT_ROWS", "2000"))
 MAX_ROWS = int(os.getenv("MAX_ROWS", "100000"))                  # /predict row limit
@@ -1737,21 +1737,18 @@ SCAN_LOCK = threading.Lock()
 # starts instantly and Render's port check passes.
 # ==========================================
 def ensure_file(filename):
-    """Return a local artifact path, downloading public model files if needed."""
     path = os.path.join(BASE_DIR, filename)
 
-    # Reuse an artifact that has already been downloaded.
     if os.path.isfile(path):
         print(f"[MODEL] Using local file: {filename}", flush=True)
         return path
 
     print(
-        f"[HF] Downloading {filename} from {HF_REPO} (repo_type=model)...",
+        f"[HF] Downloading {filename} from model repository: {HF_REPO}",
         flush=True,
     )
 
     try:
-        # This repository is public, so explicitly avoid an invalid saved token.
         downloaded_path = hf_hub_download(
             repo_id=HF_REPO,
             repo_type="model",
@@ -1759,11 +1756,8 @@ def ensure_file(filename):
             token=False,
         )
 
-        # Keep artifacts in the backend's configured model directory.
         import shutil
-        os.makedirs(BASE_DIR, exist_ok=True)
-        if os.path.abspath(downloaded_path) != os.path.abspath(path):
-            shutil.copy2(downloaded_path, path)
+        shutil.copy2(downloaded_path, path)
 
         print(f"[HF] Download successful: {filename}", flush=True)
         return path
@@ -1774,12 +1768,7 @@ def ensure_file(filename):
             f"{type(exc).__name__}: {exc}",
             flush=True,
         )
-        raise RuntimeError(
-            f"Could not download '{filename}' from Hugging Face. "
-            "Check the repository ID, exact filename, and repository access."
-        ) from exc
-
-
+        raise
 app = FastAPI(title="AI-SIEM Multi-Dataset Intrusion Detection API")
 
 # Set ALLOWED_ORIGINS in Render to your frontend origin, for example:
