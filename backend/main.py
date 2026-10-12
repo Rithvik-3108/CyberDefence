@@ -1689,6 +1689,9 @@
 #     except Exception as e:
 #         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+################V testing ################
 import os
 
 # Quieter, lighter TensorFlow (must be set before importing tensorflow)
@@ -1756,7 +1759,7 @@ app = FastAPI(title="AI-SIEM Multi-Dataset Intrusion Detection API")
 # when credentials/cookies are not used.
 raw_origins = os.getenv(
     "ALLOWED_ORIGINS",
-    "https://cybersecurity-ann-web.onrender.com"
+    "https://cybersecurity-ann-web.onrender.com",
 )
 origins = [
     origin.strip().rstrip("/")
@@ -1773,6 +1776,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Log requests (including OPTIONS preflight requests) so mobile failures are visible
+# in Render logs. This middleware is registered after CORS so it can log preflight too.
+@app.middleware("http")
+async def log_http_requests(request, call_next):
+    method = request.method
+    path = request.url.path
+    origin = request.headers.get("origin", "-")
+    print(f"[http] -> {method} {path} origin={origin}", flush=True)
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        print(
+            f"[http] !! {method} {path} exception={type(exc).__name__}: {exc}",
+            flush=True,
+        )
+        raise
+    print(f"[http] <- {method} {path} status={response.status_code}", flush=True)
+    return response
 
 
 class DatasetEnum(str, Enum):
@@ -2153,14 +2176,28 @@ def predict(
     model_type: ModelEnum = Form(...),
     file: UploadFile = File(...),
 ):
+    print(
+        f"[predict] Entered endpoint: dataset={dataset.value}, "
+        f"model={model_type.value}, filename={file.filename}",
+        flush=True,
+    )
     try:
+        print("[predict] Waiting for scan lock...", flush=True)
         with SCAN_LOCK:
             started = time.time()
             prefix = dataset.value
+            print(f"[predict] Scan lock acquired for {prefix}.", flush=True)
+            print(f"[predict] Reading and preparing {file.filename}...", flush=True)
 
             df_original, df_feat, art = read_and_prepare(file, prefix)
-
+            print(
+                f"[predict] Prepared {len(df_feat):,} rows and "
+                f"{len(df_feat.columns):,} feature columns.",
+                flush=True,
+            )
+            print(f"[predict] Running model {model_type.value}...", flush=True)
             predictions, scores, sim, events = scan_in_chunks(df_feat, art, prefix, model_type.value)
+            print("[predict] Model scan completed; preparing response...", flush=True)
 
             label_map = {0: "normal", 1: "attack"}
             results = [label_map[p] for p in predictions.tolist()]
