@@ -1754,7 +1754,10 @@ app = FastAPI(title="AI-SIEM Multi-Dataset Intrusion Detection API")
 # https://your-frontend-name.onrender.com
 # Multiple origins can be comma-separated. "*" is allowed for public APIs
 # when credentials/cookies are not used.
-raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
+raw_origins = os.getenv(
+    "ALLOWED_ORIGINS",
+    "https://cybersecurity-ann-web.onrender.com"
+)
 origins = [
     origin.strip().rstrip("/")
     for origin in raw_origins.split(",")
