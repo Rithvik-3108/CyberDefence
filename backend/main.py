@@ -1691,7 +1691,6 @@
 
 
 
-################V testing ################
 import os
 
 # Quieter, lighter TensorFlow (must be set before importing tensorflow)
@@ -1738,17 +1737,47 @@ SCAN_LOCK = threading.Lock()
 # starts instantly and Render's port check passes.
 # ==========================================
 def ensure_file(filename):
+    """Return a local artifact path, downloading public model files if needed."""
     path = os.path.join(BASE_DIR, filename)
-    if not os.path.exists(path):
-        print(f"Downloading {filename} from Hugging Face...", flush=True)
-        hf_hub_download(
+
+    # Reuse an artifact that has already been downloaded.
+    if os.path.isfile(path):
+        print(f"[MODEL] Using local file: {filename}", flush=True)
+        return path
+
+    print(
+        f"[HF] Downloading {filename} from {HF_REPO} (repo_type=model)...",
+        flush=True,
+    )
+
+    try:
+        # This repository is public, so explicitly avoid an invalid saved token.
+        downloaded_path = hf_hub_download(
             repo_id=HF_REPO,
-            repo_type=HF_REPO_TYPE,
+            repo_type="model",
             filename=filename,
-            local_dir=BASE_DIR,
-            token=HF_TOKEN,
+            token=False,
         )
-    return path
+
+        # Keep artifacts in the backend's configured model directory.
+        import shutil
+        os.makedirs(BASE_DIR, exist_ok=True)
+        if os.path.abspath(downloaded_path) != os.path.abspath(path):
+            shutil.copy2(downloaded_path, path)
+
+        print(f"[HF] Download successful: {filename}", flush=True)
+        return path
+
+    except Exception as exc:
+        print(
+            f"[HF] Download failed: {filename} | "
+            f"{type(exc).__name__}: {exc}",
+            flush=True,
+        )
+        raise RuntimeError(
+            f"Could not download '{filename}' from Hugging Face. "
+            "Check the repository ID, exact filename, and repository access."
+        ) from exc
 
 
 app = FastAPI(title="AI-SIEM Multi-Dataset Intrusion Detection API")
@@ -1757,10 +1786,7 @@ app = FastAPI(title="AI-SIEM Multi-Dataset Intrusion Detection API")
 # https://your-frontend-name.onrender.com
 # Multiple origins can be comma-separated. "*" is allowed for public APIs
 # when credentials/cookies are not used.
-raw_origins = os.getenv(
-    "ALLOWED_ORIGINS",
-    "https://cybersecurity-ann-web.onrender.com",
-)
+raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
 origins = [
     origin.strip().rstrip("/")
     for origin in raw_origins.split(",")
@@ -1776,63 +1802,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-# Log requests (including OPTIONS preflight requests) so mobile failures are visible
-# in Render logs. This middleware is registered after CORS so it can log preflight too.
-# @app.middleware("http")
-# async def log_http_requests(request, call_next):
-#     method = request.method
-#     path = request.url.path
-#     origin = request.headers.get("origin", "-")
-#     print(f"[http] -> {method} {path} origin={origin}", flush=True)
-#     try:
-#         response = await call_next(request)
-#     except Exception as exc:
-#         print(
-#             f"[http] !! {method} {path} exception={type(exc).__name__}: {exc}",
-#             flush=True,
-#         )
-#         raise
-#     print(f"[http] <- {method} {path} status={response.status_code}", flush=True)
-#     return response
-
-@app.middleware("http")
-async def log_http_requests(request, call_next):
-    method = request.method
-    path = request.url.path
-    origin = request.headers.get("origin", "-")
-
-    requested_method = request.headers.get(
-        "access-control-request-method", "-"
-    )
-    requested_headers = request.headers.get(
-        "access-control-request-headers", "-"
-    )
-
-    print(
-        f"[http] -> {method} {path} "
-        f"origin={origin} "
-        f"requested_method={requested_method} "
-        f"requested_headers={requested_headers}",
-        flush=True,
-    )
-
-    try:
-        response = await call_next(request)
-    except Exception as exc:
-        print(
-            f"[http] !! {method} {path} "
-            f"exception={type(exc).__name__}: {exc}",
-            flush=True,
-        )
-        raise
-
-    print(
-        f"[http] <- {method} {path} status={response.status_code}",
-        flush=True,
-    )
-    return response
 
 
 class DatasetEnum(str, Enum):
@@ -2213,28 +2182,14 @@ def predict(
     model_type: ModelEnum = Form(...),
     file: UploadFile = File(...),
 ):
-    print(
-        f"[predict] Entered endpoint: dataset={dataset.value}, "
-        f"model={model_type.value}, filename={file.filename}",
-        flush=True,
-    )
     try:
-        print("[predict] Waiting for scan lock...", flush=True)
         with SCAN_LOCK:
             started = time.time()
             prefix = dataset.value
-            print(f"[predict] Scan lock acquired for {prefix}.", flush=True)
-            print(f"[predict] Reading and preparing {file.filename}...", flush=True)
 
             df_original, df_feat, art = read_and_prepare(file, prefix)
-            print(
-                f"[predict] Prepared {len(df_feat):,} rows and "
-                f"{len(df_feat.columns):,} feature columns.",
-                flush=True,
-            )
-            print(f"[predict] Running model {model_type.value}...", flush=True)
+
             predictions, scores, sim, events = scan_in_chunks(df_feat, art, prefix, model_type.value)
-            print("[predict] Model scan completed; preparing response...", flush=True)
 
             label_map = {0: "normal", 1: "attack"}
             results = [label_map[p] for p in predictions.tolist()]
