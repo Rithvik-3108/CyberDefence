@@ -3880,7 +3880,7 @@ import './App1.css';
 
 // Render backend URL is the production fallback. You can override it with VITE_API_URL.
 const API_URL = (
-  import.meta.env.VITE_API_URL || 'https://cybersecurity-ann-api.onrender.com'
+  import.meta.env.VITE_API_URL || 'https://cybersecurity-ann-api1.onrender.com'
 ).trim().replace(/\/+$/, '');
 
 const API_HOST = API_URL.replace(/^https?:\/\//, '');
